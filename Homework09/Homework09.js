@@ -1,5 +1,3 @@
-// hw09/Homework09.js
-
 import * as THREE from 'three';
 import {
   initRenderer,
@@ -8,29 +6,29 @@ import {
   initOrbitControls
 } from './util.js';
 
-// ─── 설정 상수 ─────────────────────────────────────────────
+// configuration
 const SUN_RADIUS    = 10;
 const SUN_COLOR     = 0xffff00;
 const PLANET_CONFIG = [
-  { name: 'Mercury', tex: 'Mercury.jpg', radius: 1.5, distance: 20 },
-  { name: 'Venus',   tex: 'Venus.jpg',   radius: 3.0, distance: 35 },
-  { name: 'Earth',   tex: 'Earth.jpg',   radius: 3.5, distance: 50 },
-  { name: 'Mars',    tex: 'Mars.jpg',    radius: 2.5, distance: 65 }
+  { name:'Mercury', tex:'Mercury.jpg', radius:1.5, distance:20 },
+  { name:'Venus',   tex:'Venus.jpg',   radius:3.0, distance:35 },
+  { name:'Earth',   tex:'Earth.jpg',   radius:3.5, distance:50 },
+  { name:'Mars',    tex:'Mars.jpg',    radius:2.5, distance:65 }
 ];
 
-// ─── 전역 변수 ─────────────────────────────────────────────
+// globals
 let scene, renderer;
 let perspCam, orthoCam, currentCam;
 let stats, orbitControls;
 const textureLoader = new THREE.TextureLoader();
-const planets = {};    // { Mercury: { mesh, pivot }, … }
+const planets = {};
+let gui, guiVisible = true;
 
-
-// ─── UI 제어 객체 ───────────────────────────────────────────
+// UI controls
 const controls = new function() {
   this.cameraMode = 'Perspective';
 
-  // Perspective ⇄ Orthographic 전환
+  // toggle Perspective ↔ Orthographic
   this.switchCamera = () => {
     if (currentCam === perspCam) {
       orthoCam = new THREE.OrthographicCamera(
@@ -38,7 +36,7 @@ const controls = new function() {
         window.innerHeight / 16, window.innerHeight / -16,
         perspCam.near, perspCam.far
       );
-      orthoCam.position.copy(perspCam.position);
+      orthoCam.position.set(0, 30, 130);
       orthoCam.lookAt(scene.position);
 
       currentCam = orthoCam;
@@ -47,22 +45,20 @@ const controls = new function() {
       currentCam = perspCam;
       this.cameraMode = 'Perspective';
     }
-
-    // OrbitControls 재연결
     orbitControls.dispose();
     orbitControls = initOrbitControls(currentCam, renderer);
   };
 
-  // Control 버튼만 남기고 GUI 토글
+  // show/hide everything except the Control button
   this.toggleGUI = () => {
     const list = gui.domElement.querySelector('ul');
-    Array.from(list.children).forEach((li, i) => {
-      if (i === 0) return;      // 첫 번째 Control 버튼은 항상 보이기
+    Array.from(list.children).forEach((li,i) => {
+      if (i===0) return;
       li.style.display = li.style.display === 'none' ? '' : 'none';
     });
   };
 
-  // 행성 속도 초기값
+  // initial rotation/orbit speeds
   this.mercuryRotSpeed   = 0.02;
   this.mercuryOrbitSpeed = 0.02;
   this.venusRotSpeed     = 0.015;
@@ -73,53 +69,48 @@ const controls = new function() {
   this.marsOrbitSpeed    = 0.008;
 }();
 
-let gui;  // 전역으로 선언
-
-// ─── 초기화 ─────────────────────────────────────────────────
+// init everything
 function init() {
   scene    = new THREE.Scene();
   renderer = initRenderer();
 
-  // 1) PerspectiveCamera
-  perspCam = initCamera(new THREE.Vector3(0, 50, 100));
+  // 1) camera setup
+  perspCam = initCamera(new THREE.Vector3(0, 30, 130));
   currentCam = perspCam;
 
-  // 2) 기본 조명
-  scene.add(new THREE.AmbientLight(0x343434));
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-  dirLight.position.set(50, 50, 50);
-  scene.add(dirLight);
+  // 2) lights
+  scene.add(new THREE.AmbientLight(0x333333));
+  const dir = new THREE.DirectionalLight(0xffffff);
+  dir.position.set(50,50,0);
+  scene.add(dir);
 
-  // 3) Stats & OrbitControls
+  // 3) stats & controls
   stats         = initStats(0);
   orbitControls = initOrbitControls(currentCam, renderer);
 
-  // 4) 천체 생성
+  // 4) create Sun & planets
   createSun();
   createPlanets();
 
-  // 5) GUI 생성
+  // 5) build GUI
   createGUI();
 
-  // 6) 리사이즈 핸들러
   window.addEventListener('resize', onWindowResize);
 }
 
-// ─── 태양 생성 ───────────────────────────────────────────────
 function createSun() {
-  const geo = new THREE.SphereGeometry(SUN_RADIUS, 32, 32);
+  const geo = new THREE.SphereGeometry(SUN_RADIUS,32,32);
   const mat = new THREE.MeshBasicMaterial({ color: SUN_COLOR });
   scene.add(new THREE.Mesh(geo, mat));
 }
 
-// ─── 행성 생성 ───────────────────────────────────────────────
 function createPlanets() {
   PLANET_CONFIG.forEach(p => {
     const pivot = new THREE.Object3D();
     scene.add(pivot);
 
     const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(p.radius, 32, 32),
+      new THREE.SphereGeometry(p.radius,32,32),
       new THREE.MeshStandardMaterial({
         map:       textureLoader.load(p.tex),
         roughness: 0.8,
@@ -133,65 +124,58 @@ function createPlanets() {
   });
 }
 
-// ─── GUI 생성 ───────────────────────────────────────────────
 function createGUI() {
-  gui = new dat.GUI({ width: 260 });
+  gui = new dat.GUI({ width:260 });
+  gui.add(controls,'toggleGUI').name('Control');
 
-  // Control 버튼
-  gui.add(controls, 'toggleGUI').name('Control');
+  // Camera folder
+  const cF = gui.addFolder('Camera');
+  cF.add(controls,'switchCamera').name('Switch Camera');
+  cF.add(controls,'cameraMode').name('Current Cam').listen();
+  cF.open();
 
-  // Camera 폴더
-  const camF = gui.addFolder('Camera');
-  camF.add(controls, 'switchCamera').name('Switch Camera');
-  camF.add(controls, 'cameraMode').name('Current Cam').listen();
-  camF.open();
-
-  // 각 행성별 폴더
+  // Planet folders
   PLANET_CONFIG.forEach(p => {
     const key = p.name.toLowerCase();
     const f   = gui.addFolder(p.name);
-    f.add(controls, `${key}RotSpeed`,   0, 0.1, 0.001).name('Rotation');
-    f.add(controls, `${key}OrbitSpeed`, 0, 0.1, 0.001).name('Orbit');
+    f.add(controls,`${key}RotSpeed`,   0,0.1,0.001).name('Rotation');
+    f.add(controls,`${key}OrbitSpeed`, 0,0.1,0.001).name('Orbit');
     f.open();
   });
 }
 
-// ─── 리사이즈 핸들러 ─────────────────────────────────────────
 function onWindowResize() {
   const w = window.innerWidth, h = window.innerHeight;
-  renderer.setSize(w, h);
+  renderer.setSize(w,h);
 
-  // PerspectiveCamera 업데이트
-  perspCam.aspect = w / h;
+  // update perspective
+  perspCam.aspect = w/h;
   perspCam.updateProjectionMatrix();
 
   if (orthoCam) {
-    orthoCam.left   = w / -16;
-    orthoCam.right  = w /  16;
-    orthoCam.top    = h /  16;
-    orthoCam.bottom = h / -16;
+    orthoCam.left   = w/-16;
+    orthoCam.right  = w/16;
+    orthoCam.top    = h/16;
+    orthoCam.bottom = h/-16;
     orthoCam.updateProjectionMatrix();
   }
 }
 
-// ─── 애니메이션 루프 ─────────────────────────────────────────
 function animate() {
   stats.begin();
 
-  PLANET_CONFIG.forEach(p => {
-    const key    = p.name.toLowerCase();
-    const planet = planets[p.name];
-    planet.mesh.rotation.y  += controls[`${key}RotSpeed`];
-    planet.pivot.rotation.y += controls[`${key}OrbitSpeed`];
+  PLANET_CONFIG.forEach(p=>{
+    const key = p.name.toLowerCase();
+    const o   = planets[p.name];
+    o.mesh.rotation.y  += controls[`${key}RotSpeed`];
+    o.pivot.rotation.y += controls[`${key}OrbitSpeed`];
   });
 
   orbitControls.update();
   renderer.render(scene, currentCam);
-
   stats.end();
   requestAnimationFrame(animate);
 }
 
-// ─── 실행 진입점 ─────────────────────────────────────────────
 init();
 animate();
